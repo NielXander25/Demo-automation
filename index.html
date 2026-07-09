@@ -28,10 +28,12 @@
   .typing span:nth-child(3) { animation-delay: 0.4s; }
   @keyframes blink { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
   .footer { text-align: center; font-size: 11px; color: #6b7280; padding: 8px; background: #f7f7f8; }
-  .voicebar { padding: 0 12px 12px; background: #fff; }
-  .voicebar button { width: 100%; background: #d97757; color: #fff; border: none; border-radius: 20px; padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
-  .voicebar button:hover { opacity: 0.9; }
-  .voicebar button.active { background: #dc2626; }
+  .voicebar { padding: 0 12px 12px; background: #fff; display: flex; gap: 8px; }
+  .voicebar button { flex: 1; border: none; border-radius: 20px; padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+  .voicebar button:hover:not(:disabled) { opacity: 0.9; }
+  .voicebar button:disabled { opacity: 0.4; cursor: not-allowed; }
+  #callBtn { background: #d97757; color: #fff; }
+  #hangupBtn { background: #dc2626; color: #fff; }
 </style>
 </head>
 <body>
@@ -65,7 +67,8 @@
   </div>
 
   <div class="voicebar">
-    <button id="voiceBtn" onclick="toggleVoiceCall()">🎙️ Parler à l'assistant</button>
+    <button id="callBtn">🎙️ Appeler l'assistant</button>
+    <button id="hangupBtn" disabled>🔴 Raccrocher</button>
   </div>
 
   <div class="footer">Ceci est une démonstration KMLABS — kmlabs.dev</div>
@@ -182,39 +185,42 @@ document.querySelectorAll(".chip").forEach(chip => {
 </script>
 
 <script type="module">
-  import Vapi from "https://esm.sh/@vapi-ai/web@latest";
+  import Vapi from "https://cdn.skypack.dev/@vapi-ai/web";
 
   const VAPI_PUBLIC_KEY = "5830e4ad-acd4-4a4e-8046-edb8991f6d2e";
-  const VAPI_ASSISTANT_ID = "39809986-f512-4715-985e-5ef36552d44b";
+  const assistantId = "b4c95c6a-969f-4c71-8935-aa6656853bbc"; // KMLABS — Hotel Assistant (Demo)
 
   const vapi = new Vapi(VAPI_PUBLIC_KEY);
-  let callActive = false;
+  const callBtn = document.getElementById("callBtn");
+  const hangupBtn = document.getElementById("hangupBtn");
 
-  function updateVoiceButton() {
-    const btn = document.getElementById("voiceBtn");
-    if (callActive) {
-      btn.textContent = "🔴 Terminer l'appel";
-      btn.classList.add("active");
-    } else {
-      btn.textContent = "🎙️ Parler à l'assistant";
-      btn.classList.remove("active");
+  callBtn.addEventListener("click", async () => {
+    callBtn.disabled = true;
+    try {
+      await vapi.start(assistantId);
+      hangupBtn.disabled = false;
+    } catch (e) {
+      console.error("Failed to start call:", e);
+      addMessage("⚠️ Impossible de démarrer l'appel. Vérifiez la console pour plus de détails.", "bot");
+      callBtn.disabled = false;
     }
-  }
+  });
+
+  hangupBtn.addEventListener("click", () => {
+    vapi.stop();
+  });
 
   vapi.on("call-start", () => {
-    callActive = true;
-    updateVoiceButton();
     addMessage("📞 Appel connecté — vous pouvez parler maintenant.", "bot");
   });
 
   vapi.on("call-end", () => {
-    callActive = false;
-    updateVoiceButton();
+    callBtn.disabled = false;
+    hangupBtn.disabled = true;
     addMessage("📞 Appel terminé.", "bot");
   });
 
-  // This is the piece that was missing: transcripts arrive as 'message' events,
-  // not automatically — we have to catch them and write them into the chat log.
+  // Transcripts arrive as 'message' events — catch them and write into the chat log
   vapi.on("message", (message) => {
     if (message.type === "transcript" && message.transcriptType === "final") {
       addMessage(message.transcript, message.role === "user" ? "user" : "bot");
@@ -223,16 +229,8 @@ document.querySelectorAll(".chip").forEach(chip => {
 
   vapi.on("error", (e) => {
     console.error("Vapi error:", e);
-    addMessage("⚠️ Une erreur est survenue avec l'appel vocal. Vérifiez la console pour plus de détails.", "bot");
+    addMessage("⚠️ Une erreur est survenue avec l'appel vocal.", "bot");
   });
-
-  window.toggleVoiceCall = function () {
-    if (!callActive) {
-      vapi.start(VAPI_ASSISTANT_ID);
-    } else {
-      vapi.stop();
-    }
-  };
 </script>
 
 </body>

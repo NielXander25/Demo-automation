@@ -90,7 +90,6 @@
      phone number required.
 ============================================================
 -->
-<script src="https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/assets/index.js" defer></script>
 
 <script>
 const responses = {
@@ -179,40 +178,61 @@ document.querySelectorAll(".chip").forEach(chip => {
   });
 });
 
-// ===== VOICE CALL (Vapi) =====
-// Replace these two placeholders after setting up your Vapi assistant.
-// See the HTML comment above for setup steps.
-const VAPI_PUBLIC_KEY = "5830e4ad-acd4-4a4e-8046-edb8991f6d2e";
-const VAPI_ASSISTANT_ID = "39809986-f512-4715-985e-5ef36552d44b";
+// ===== VOICE CALL (Vapi) — button hookup lives in the module script below =====
+</script>
 
-let vapiInstance = null;
-let callActive = false;
+<script type="module">
+  import Vapi from "https://esm.sh/@vapi-ai/web@latest";
 
-function toggleVoiceCall() {
-  const btn = document.getElementById("voiceBtn");
+  const VAPI_PUBLIC_KEY = "5830e4ad-acd4-4a4e-8046-edb8991f6d2e";
+  const VAPI_ASSISTANT_ID = "39809986-f512-4715-985e-5ef36552d44b";
 
-  if (VAPI_PUBLIC_KEY.startsWith("PASTE_") || VAPI_ASSISTANT_ID.startsWith("PASTE_")) {
-    addMessage("(Démo : la fonction d'appel vocal n'est pas encore configurée — voir les instructions dans le code source.)", "bot");
-    return;
-  }
+  const vapi = new Vapi(VAPI_PUBLIC_KEY);
+  let callActive = false;
 
-  if (!callActive) {
-    if (!vapiInstance && window.vapiSDK) {
-      vapiInstance = window.vapiSDK.run({
-        apiKey: VAPI_PUBLIC_KEY,
-        assistant: VAPI_ASSISTANT_ID,
-      });
+  function updateVoiceButton() {
+    const btn = document.getElementById("voiceBtn");
+    if (callActive) {
+      btn.textContent = "🔴 Terminer l'appel";
+      btn.classList.add("active");
+    } else {
+      btn.textContent = "🎙️ Parler à l'assistant";
+      btn.classList.remove("active");
     }
-    callActive = true;
-    btn.textContent = "🔴 Terminer l'appel";
-    btn.classList.add("active");
-  } else {
-    if (vapiInstance) vapiInstance.stop();
-    callActive = false;
-    btn.textContent = "🎙️ Parler à l'assistant";
-    btn.classList.remove("active");
   }
-}
+
+  vapi.on("call-start", () => {
+    callActive = true;
+    updateVoiceButton();
+    addMessage("📞 Appel connecté — vous pouvez parler maintenant.", "bot");
+  });
+
+  vapi.on("call-end", () => {
+    callActive = false;
+    updateVoiceButton();
+    addMessage("📞 Appel terminé.", "bot");
+  });
+
+  // This is the piece that was missing: transcripts arrive as 'message' events,
+  // not automatically — we have to catch them and write them into the chat log.
+  vapi.on("message", (message) => {
+    if (message.type === "transcript" && message.transcriptType === "final") {
+      addMessage(message.transcript, message.role === "user" ? "user" : "bot");
+    }
+  });
+
+  vapi.on("error", (e) => {
+    console.error("Vapi error:", e);
+    addMessage("⚠️ Une erreur est survenue avec l'appel vocal. Vérifiez la console pour plus de détails.", "bot");
+  });
+
+  window.toggleVoiceCall = function () {
+    if (!callActive) {
+      vapi.start(VAPI_ASSISTANT_ID);
+    } else {
+      vapi.stop();
+    }
+  };
 </script>
 
 </body>

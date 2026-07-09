@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>KMLABS — Assistant Hôtel (Démo)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  body { background: #0f1115; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+  .widget { width: 380px; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.4); display: flex; flex-direction: column; height: 600px; }
+  .header { background: #1a1d24; color: #fff; padding: 18px 20px; display: flex; align-items: center; gap: 12px; }
+  .header .dot { width: 10px; height: 10px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+  .header .title { font-weight: 600; font-size: 15px; }
+  .header .sub { font-size: 12px; color: #9ca3af; margin-top: 2px; }
+  .badge { margin-left: auto; font-size: 10px; background: #d97757; padding: 3px 8px; border-radius: 20px; font-weight: 600; }
+  .messages { flex: 1; padding: 16px; overflow-y: auto; background: #f7f7f8; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 80%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.4; }
+  .bot { background: #fff; border: 1px solid #e5e7eb; align-self: flex-start; border-bottom-left-radius: 4px; }
+  .user { background: #1a1d24; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+  .suggestions { padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 6px; background: #f7f7f8; }
+  .chip { font-size: 12px; background: #fff; border: 1px solid #d1d5db; padding: 6px 10px; border-radius: 20px; cursor: pointer; color: #374151; }
+  .chip:hover { background: #f0f0f0; }
+  .inputbar { display: flex; padding: 12px; border-top: 1px solid #e5e7eb; background: #fff; gap: 8px; }
+  .inputbar input { flex: 1; border: 1px solid #d1d5db; border-radius: 20px; padding: 10px 14px; font-size: 14px; outline: none; }
+  .inputbar button { background: #1a1d24; color: #fff; border: none; border-radius: 20px; padding: 0 18px; font-size: 14px; cursor: pointer; }
+  .typing { align-self: flex-start; display: flex; gap: 4px; padding: 10px 14px; }
+  .typing span { width: 6px; height: 6px; background: #9ca3af; border-radius: 50%; animation: blink 1.4s infinite ease-in-out; }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
+  .footer { text-align: center; font-size: 11px; color: #6b7280; padding: 8px; background: #f7f7f8; }
+  .voicebar { padding: 0 12px 12px; background: #fff; }
+  .voicebar button { width: 100%; background: #d97757; color: #fff; border: none; border-radius: 20px; padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+  .voicebar button:hover { opacity: 0.9; }
+  .voicebar button.active { background: #dc2626; }
+</style>
+</head>
+<body>
+
+<div class="widget">
+  <div class="header">
+    <div class="dot"></div>
+    <div>
+      <div class="title">Assistant Hôtel</div>
+      <div class="sub">En ligne · Répond instantanément</div>
+    </div>
+    <div class="badge">DÉMO KMLABS</div>
+  </div>
+
+  <div class="messages" id="messages">
+    <div class="msg bot">Bonjour 👋 Je suis l'assistant virtuel de l'hôtel. Je peux répondre à vos questions à tout moment, jour et nuit. Comment puis-je vous aider ?</div>
+  </div>
+
+  <div class="suggestions" id="suggestions">
+    <div class="chip" data-q="disponibilite">Chambres disponibles ce week-end ?</div>
+    <div class="chip" data-q="checkin">Heure d'arrivée ?</div>
+    <div class="chip" data-q="parking">Avez-vous un parking ?</div>
+    <div class="chip" data-q="spa">Le spa est-il ouvert ?</div>
+  </div>
+
+  <div class="inputbar">
+    <input type="text" id="userInput" placeholder="Écrivez votre message...">
+    <button onclick="sendMessage()">Envoyer</button>
+  </div>
+
+  <div class="voicebar">
+    <button id="voiceBtn" onclick="toggleVoiceCall()">🎙️ Parler à l'assistant</button>
+  </div>
+
+  <div class="footer">Ceci est une démonstration KMLABS — kmlabs.dev</div>
+</div>
+
+<!--
+  ============================================================
+  VOICE CALL SETUP (Vapi) — read this before going live
+  ============================================================
+  1. Create a free account at https://vapi.ai
+  2. In the dashboard, create an Assistant:
+     - Set its language/voice to French
+     - Give it a system prompt describing your hotel's info
+       (rooms, prices, check-in time, parking, spa hours)
+  3. Copy your PUBLIC key (dashboard > API Keys — use the
+     PUBLIC one, never the private/secret key in browser code)
+  4. Copy your Assistant ID (from the assistant you created)
+  5. Paste both into the placeholders below
+     (VAPI_PUBLIC_KEY and VAPI_ASSISTANT_ID)
+  6. Done — the mic button below will start a real, live
+     voice conversation with your AI, in the browser, no
+     phone number required.
+============================================================
+-->
+<script src="https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/assets/index.js" defer></script>
+
+<script>
+const responses = {
+  disponibilite: "Oui, nous avons des chambres disponibles ce week-end. Une chambre Standard est à 120€/nuit et une Deluxe avec vue à 165€/nuit, petit-déjeuner inclus. Souhaitez-vous que je vous transmette un lien de réservation ?",
+  checkin: "L'heure d'arrivée standard est 15h00, et le départ se fait avant 11h00. Un arrivée anticipée peut être organisée selon disponibilité — souhaitez-vous que je vérifie pour votre date ?",
+  parking: "Oui, nous disposons d'un parking privé sécurisé au tarif de 18€/nuit, réservable à l'avance. Voulez-vous que je l'ajoute à votre réservation ?",
+  spa: "Notre spa est ouvert tous les jours de 9h00 à 20h00, avec un dernier accès à 19h00. Souhaitez-vous réserver un soin pendant votre séjour ?",
+  default: "Merci pour votre message. Je transmets votre demande à notre équipe qui vous répondra très rapidement. Puis-je vous aider avec autre chose en attendant — disponibilité, horaires, ou services de l'hôtel ?"
+};
+
+function detectIntent(text) {
+  const t = text.toLowerCase();
+  if (t.includes("dispon") || t.includes("chambre") || t.includes("réserv")) return "disponibilite";
+  if (t.includes("arriv") || t.includes("check") || t.includes("heure")) return "checkin";
+  if (t.includes("parking") || t.includes("voiture") || t.includes("garer")) return "parking";
+  if (t.includes("spa") || t.includes("massage") || t.includes("soin")) return "spa";
+  return "default";
+}
+
+function addMessage(text, sender) {
+  const messages = document.getElementById("messages");
+  const div = document.createElement("div");
+  div.className = "msg " + sender;
+  div.textContent = text;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function showTyping() {
+  const messages = document.getElementById("messages");
+  const div = document.createElement("div");
+  div.className = "typing";
+  div.id = "typingIndicator";
+  div.innerHTML = "<span></span><span></span><span></span>";
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function removeTyping() {
+  const el = document.getElementById("typingIndicator");
+  if (el) el.remove();
+}
+
+function respond(userText) {
+  showTyping();
+  setTimeout(() => {
+    removeTyping();
+    const intent = detectIntent(userText);
+    addMessage(responses[intent], "bot");
+  }, 900);
+}
+
+function sendMessage() {
+  const input = document.getElementById("userInput");
+  const text = input.value.trim();
+  if (!text) return;
+  addMessage(text, "user");
+  input.value = "";
+  respond(text);
+}
+
+document.getElementById("userInput").addEventListener("keypress", function(e) {
+  if (e.key === "Enter") sendMessage();
+});
+
+document.querySelectorAll(".chip").forEach(chip => {
+  chip.addEventListener("click", function() {
+    const text = this.textContent;
+    addMessage(text, "user");
+    respond(text);
+  });
+});
+
+// ===== VOICE CALL (Vapi) =====
+// Replace these two placeholders after setting up your Vapi assistant.
+// See the HTML comment above for setup steps.
+const VAPI_PUBLIC_KEY = "PASTE_YOUR_VAPI_PUBLIC_KEY_HERE";
+const VAPI_ASSISTANT_ID = "PASTE_YOUR_VAPI_ASSISTANT_ID_HERE";
+
+let vapiInstance = null;
+let callActive = false;
+
+function toggleVoiceCall() {
+  const btn = document.getElementById("voiceBtn");
+
+  if (VAPI_PUBLIC_KEY.startsWith("PASTE_") || VAPI_ASSISTANT_ID.startsWith("PASTE_")) {
+    addMessage("(Démo : la fonction d'appel vocal n'est pas encore configurée — voir les instructions dans le code source.)", "bot");
+    return;
+  }
+
+  if (!callActive) {
+    if (!vapiInstance && window.vapiSDK) {
+      vapiInstance = window.vapiSDK.run({
+        apiKey: VAPI_PUBLIC_KEY,
+        assistant: VAPI_ASSISTANT_ID,
+      });
+    }
+    callActive = true;
+    btn.textContent = "🔴 Terminer l'appel";
+    btn.classList.add("active");
+  } else {
+    if (vapiInstance) vapiInstance.stop();
+    callActive = false;
+    btn.textContent = "🎙️ Parler à l'assistant";
+    btn.classList.remove("active");
+  }
+}
+</script>
+
+</body>
+</html>
